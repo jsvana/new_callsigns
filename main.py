@@ -61,10 +61,10 @@ class People:
 
 class Person:
     def __init__(self):
-        self.records = {}
+        self.records = defaultdict(list)
 
     def add_record(self, record_type, record):
-        self.records[record_type] = record
+        self.records[record_type].append(record)
 
     @property
     def id(self):
@@ -73,13 +73,18 @@ class Person:
     def __getattr__(self, attr):
         DEFAULT = '-'
         val = None
-        for _, record in self.records.items():
-            if hasattr(record, attr):
-                val = getattr(record, attr)
-                if not val:
-                    continue
-                if attr in record.__class__.TRANSFORMS:
-                    val = record.__class__.TRANSFORMS[attr](val)
+        for _, records in self.records.items():
+            entries = []
+            for record in records:
+                if hasattr(record, attr):
+                    attr_val = getattr(record, attr)
+                    if not attr_val:
+                        continue
+                    if attr in record.__class__.TRANSFORMS:
+                        attr_val = record.__class__.TRANSFORMS[attr](attr_val)
+                    entries.append(attr_val)
+            if entries:
+                val = ', '.join(entries)
                 break
         if val is None:
             return DEFAULT
@@ -238,7 +243,6 @@ class Entity(Record):
     def __str__(self):
         return self.entity_name
 
-# TODO(jsvana): one person can have many vanities
 class Vanity(Record):
     RECORD_TYPE = 'VC'
     FIELDS = [
@@ -313,6 +317,7 @@ def print_data(args):
         'entity_name',
         'call_sign',
         'operator_class',
+        'requested_call_sign',
     ]
     people = People.from_folder(filename.replace('.zip', ''))
     data = []

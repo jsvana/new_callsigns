@@ -44,7 +44,10 @@ class People:
     def from_folder(cls, pathname):
         people = People()
         for record_type in RECORD_TYPES:
-            people.load_records(pathname, record_type)
+            try:
+                people.load_records(pathname, record_type)
+            except RecordNonexistentException:
+                pass
         return people
 
     def load_records(self, pathname, record_type):
@@ -82,6 +85,9 @@ class Person:
             return DEFAULT
         return val
 
+class RecordNonexistentException(Exception):
+    pass
+
 class Record:
     # Overwritten by children
     RECORD_TYPE = []
@@ -100,12 +106,16 @@ class Record:
     @classmethod
     def load_file(cls, pathname):
         path = os.path.join(pathname, '{}.dat'.format(cls.RECORD_TYPE))
-        with open(path, 'r') as f:
-            records = []
-            for line in f.read().split('\n'):
-                if line:
-                    records.append(cls.from_line(line))
-            return records
+        try:
+            with open(path, 'r') as f:
+                records = []
+                for line in f.read().split('\n'):
+                    if line:
+                        records.append(cls.from_line(line))
+                return records
+        except IOError as e:
+            raise RecordNonexistantException('{} does not exist: {}'.format(
+                path, e))
 
 class Header(Record):
     RECORD_TYPE = 'HD'
@@ -228,6 +238,7 @@ class Entity(Record):
     def __str__(self):
         return self.entity_name
 
+# TODO(jsvana): one person can have many vanities
 class Vanity(Record):
     RECORD_TYPE = 'VC'
     FIELDS = [

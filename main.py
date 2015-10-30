@@ -8,11 +8,13 @@ from inflection import (
     camelize,
     titleize,
 )
+import json
 import logging
 import os
 import shutil
 import sys
 from tabulate import tabulate
+import urllib.parse
 import urllib.request
 from zipfile import ZipFile
 
@@ -119,7 +121,7 @@ class Record:
                         records.append(cls.from_line(line))
                 return records
         except IOError as e:
-            raise RecordNonexistantException('{} does not exist: {}'.format(
+            raise RecordNonexistentException('{} does not exist: {}'.format(
                 path, e))
 
 class Header(Record):
@@ -271,6 +273,16 @@ def parse_args():
 
     subparsers = parser.add_subparsers()
 
+    search_parser = subparsers.add_parser(
+        'search',
+        help='Search in FCC by term'
+    )
+    search_parser.add_argument(
+        'query',
+        help='search string'
+    )
+    search_parser.set_defaults(function=search)
+
     print_parser = subparsers.add_parser(
         'print',
         help='Print FCC additions for given --day'
@@ -295,6 +307,41 @@ def parse_args():
     clean_parser.set_defaults(function=clean)
 
     return parser.parse_args()
+
+def search(args):
+    params = {
+        'format': 'json',
+        'searchValue': args.query,
+    }
+    URL = 'http://data.fcc.gov/api/license-view/basicSearch/getLicenses?{}'
+    res = urllib.request.urlopen(URL.format(urllib.parse.urlencode(params)))
+    try:
+        data = json.loads(res.read().decode('utf-8'))
+    except ValueError:
+        LOG.exception('Unable to decode JSON')
+        return
+
+    if 'Errors' in data:
+        LOG.error(', '.join([e['msg'] for e in data['Errors']['Err']]))
+        return
+
+    if data['status'] != 'OK':
+        LOG.error('Bad request')
+        return
+
+    licenses = data['Licenses']
+    if int(licenses['totalRows']) > int(licenses['rowPerPage']):
+        LOG.info('Too many entries, only printing first {}'.format(
+            licenses['rowPerPage']))
+    columns = [
+        'licName',
+        'frn',
+        'callsign',
+        'serviceDesc',
+        'statusDesc',
+    ]
+    rows = [[l[c] for c in columns] for l in licenses['License']]
+    print(tabulate(rows, headers=columns))
 
 def print_data(args):
     day = (datetime.now() - timedelta(days=1)).weekday()
